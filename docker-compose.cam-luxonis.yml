@@ -1,0 +1,10 @@
+services:
+
+  keelson-connector-camera-realsense:
+    build: .
+    container_name: cam-realsense
+    restart: unless-stopped
+    network_mode: "host"
+    privileged: true
+    command: "--log-level 10 -r rise -e test -s camera/0 --publish point_cloud --publish raw_color --publish raw_depth "
+    
