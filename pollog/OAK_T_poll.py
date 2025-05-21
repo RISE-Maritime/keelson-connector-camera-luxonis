@@ -18,6 +18,7 @@ import argparse
 def setup_pipeline_OAK_T(fps=10):
     # Create pipeline
     pipeline = dai.Pipeline()
+
     #RGB
     camRgb = pipeline.create(dai.node.ColorCamera)  #note: not using the class videoencode
     camRgb.setFps(fps)
@@ -77,93 +78,113 @@ def timeDeltaToMilliS(delta) -> float:
         return delta.total_seconds()*1000
 
 
-def run_pipeline_OAK_T(pipeline, deviceInfo, ntry=5):
-    quit_watchdog_loop = False
+def run_pipeline_OAK_T(device):
 
-    for i in range(ntry):
-        if quit_watchdog_loop:
-            break
-        try:
-            with dai.Device(pipeline,deviceInfo) as device:
-                #print('Connected cameras:', device.getConnectedCameraFeatures())
-                #print('Device name:', device.getDeviceName(), ' Product name:', device.getProductName())
+    #print('Connected cameras:', device.getConnectedCameraFeatures())
+    #print('Device name:', device.getDeviceName(), ' Product name:', device.getProductName())
 
-                videoQueue = device.getOutputQueue(name="video", maxSize=1, blocking=False)
-                thermoQueue = device.getOutputQueue(name="thermo", maxSize=1, blocking=False)
-                imuQueue = device.getOutputQueue(name="imu", maxSize=50, blocking=False)
+    videoQueue = device.getOutputQueue(name="video", maxSize=1, blocking=False)
+    thermoQueue = device.getOutputQueue(name="thermo", maxSize=1, blocking=False)
+    imuQueue = device.getOutputQueue(name="imu", maxSize=50, blocking=False)
 
-                baseTs = None
-                while True:
-                    videoIn = videoQueue.get() 
-                    thermoIn = thermoQueue.get()
-                    imuIn = imuQueue.get() #TODO: could put imu queue in a separate thread
+    baseTs = None
+    while True:
+        videoIn = videoQueue.get() 
+        thermoIn = thermoQueue.get()
+        imuIn = imuQueue.get() #TODO: could put imu queue in a separate thread
 
-                    for imuPacket in imuIn.packets:
-                        acceleroValues = imuPacket.acceleroMeter
-                        gyroValues = imuPacket.gyroscope
+        for imuPacket in imuIn.packets:
+            acceleroValues = imuPacket.acceleroMeter
+            gyroValues = imuPacket.gyroscope
 
-                        acceleroTs = acceleroValues.getTimestampDevice()
-                        gyroTs = gyroValues.getTimestampDevice()
-                        if baseTs is None:
-                            baseTs = acceleroTs if acceleroTs < gyroTs else gyroTs
-                        acceleroTs = timeDeltaToMilliS(acceleroTs - baseTs)
-                        gyroTs = timeDeltaToMilliS(gyroTs - baseTs)
+            acceleroTs = acceleroValues.getTimestampDevice()
+            gyroTs = gyroValues.getTimestampDevice()
+            if baseTs is None:
+                baseTs = acceleroTs if acceleroTs < gyroTs else gyroTs
+            acceleroTs = timeDeltaToMilliS(acceleroTs - baseTs)
+            gyroTs = timeDeltaToMilliS(gyroTs - baseTs)
 
-                        imuF = "{:.06f}"
-                        tsF  = "{:.03f}"
+            imuF = "{:.06f}"
+            tsF  = "{:.03f}"
 
-                        print(f"Accelerometer timestamp: {tsF.format(acceleroTs)} ms")
-                        print(f"Accelerometer [m/s^2]: x: {imuF.format(acceleroValues.x)} y: {imuF.format(acceleroValues.y)} z: {imuF.format(acceleroValues.z)}")
-                        print(f"Gyroscope timestamp: {tsF.format(gyroTs)} ms")
-                        print(f"Gyroscope [rad/s]: x: {imuF.format(gyroValues.x)} y: {imuF.format(gyroValues.y)} z: {imuF.format(gyroValues.z)} ")
+            print(f"Accelerometer timestamp: {tsF.format(acceleroTs)} ms")
+            print(f"Accelerometer [m/s^2]: x: {imuF.format(acceleroValues.x)} y: {imuF.format(acceleroValues.y)} z: {imuF.format(acceleroValues.z)}")
+            print(f"Gyroscope timestamp: {tsF.format(gyroTs)} ms")
+            print(f"Gyroscope [rad/s]: x: {imuF.format(gyroValues.x)} y: {imuF.format(gyroValues.y)} z: {imuF.format(gyroValues.z)} ")
 
 
-                    latencyVideo = (dai.Clock.now() - videoQueue.get().getTimestamp()).total_seconds()*1000
-                    timediffSensors = (videoQueue.get().getTimestamp() - thermoQueue.get().getTimestamp()).total_seconds()*1000
-                    
+        latencyVideo = (dai.Clock.now() - videoQueue.get().getTimestamp()).total_seconds()*1000
+        timediffSensors = (videoQueue.get().getTimestamp() - thermoQueue.get().getTimestamp()).total_seconds()*1000
+        
 
-                    #Get BGR frame from NV12 encoded video frame to show with opencv
-                    cmos_frame = videoIn.getCvFrame()
-                    cv2.putText(cmos_frame, "Latency {:.2f} ms".format(latencyVideo), (10, 10), cv2.FONT_HERSHEY_TRIPLEX, 0.4, (255,255,255))
-                    cv2.imshow("video", cmos_frame)
-
-
-                    #Get frame from thermal camera, then normalize and colorize it
-                    thermo_frame = thermoIn.getCvFrame().astype(np.float32)
-                    thermo_frame = cv2.normalize(thermo_frame, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-                    thermo_frame = cv2.applyColorMap(thermo_frame, cv2.COLORMAP_MAGMA)
-                    cv2.putText(thermo_frame, "Sensors timediff: {:.2f} ms".format(timediffSensors), (10, 10), cv2.FONT_HERSHEY_TRIPLEX, 0.4, (255,255,255))
-                    cv2.imshow("thermo", thermo_frame)
+        #Get BGR frame from NV12 encoded video frame to show with opencv
+        cmos_frame = videoIn.getCvFrame() # bytes 
+        
+        cv2.putText(cmos_frame, "Latency {:.2f} ms".format(latencyVideo), (10, 10), cv2.FONT_HERSHEY_TRIPLEX, 0.4, (255,255,255))
+        cv2.imwrite("rbg.jpg",  cmos_frame)
 
 
-                    if cv2.waitKey(1) == ord('q'):
-                        print(f"Size of thermo_frame: {thermo_frame.shape}, and size of cmos_frame: {cmos_frame.shape}")
-                        quit_watchdog_loop = True
-                        break
+        #Get frame from thermal camera, then normalize and colorize it
+        thermo_frame = thermoIn.getCvFrame().astype(np.float32)
+        thermo_frame = cv2.normalize(thermo_frame, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+        thermo_frame = cv2.applyColorMap(thermo_frame, cv2.COLORMAP_MAGMA)
+        cv2.putText(thermo_frame, "Sensors timediff: {:.2f} ms".format(timediffSensors), (10, 10), cv2.FONT_HERSHEY_TRIPLEX, 0.4, (255,255,255))
+        cv2.imwrite("thermo.jpg", thermo_frame)
 
 
-        except Exception as e:
-            print(f'Pipeline for OAT-T failed to run with exception {e}. Retrying to connect in attemp {i+1} of {ntry}')
-            time.sleep(3)
+        # if cv2.waitKey(1) == ord('q'):
+        #     print(f"Size of thermo_frame: {thermo_frame.shape}, and size of cmos_frame: {cmos_frame.shape}")
+        #     quit_watchdog_loop = True
+        #     break
+
+
+# except Exception as e:
+# print(f'Pipeline for OAT-T failed to run with exception {e}. Retrying to connect in attemp {i+1} of {ntry}')
+# time.sleep(3)
 
 
 #--- Main ---
 
-OAK_T_MXID = '14442C1091E0AECF00' #could also use IP address, but more of a problem with USB cameras
-fps = 10
-ntry = 5
 
-deviceInfo = None
-for device in dai.Device.getAllAvailableDevices():
-    print(f"MxID: {device.getMxId()}, state: {device.state}, name: {device.name}, platform: {device.platform}, protocol: {device.protocol}")
-    if device.getMxId() == OAK_T_MXID:
-        deviceInfo = dai.DeviceInfo(OAK_T_MXID)
-        print(f"Found device with address {device.name} and MxID {OAK_T_MXID}")
+def main():
+    print("Starting OAK-T pipeline...")
+    OAK_T_MXID = '14442C1091E0AECF00' #could also use IP address, but more of a problem with USB cameras
+    IP_ADDRESS = "192.168.3.12"
+    fps = 10
 
-if deviceInfo is not None:
     pipeline_OAK_T = setup_pipeline_OAK_T(fps) #add more options here later on
-    run_pipeline_OAK_T(pipeline_OAK_T, deviceInfo,ntry)
+    
+    device_info = dai.DeviceInfo(IP_ADDRESS)
+    
+    # Attempt to connect
+    # with dai.Device(deviceInfo=device_info) as device:
+    with dai.Device(deviceInfo=device_info, pipeline=pipeline_OAK_T) as device:
+    # for device in dai.Device.getAllAvailableDevices():
+        print(f"MxID: {device.getMxId()}, name: {device.getDeviceName()}, platform: {device.getDeviceInfo()}")
 
+        thermalFound = False
+        # for features in device.getConnectedCameraFeatures():
+        #     print(f"Camera features: {features}")
+        #     if dai.CameraSensorType.THERMAL in features.supportedTypes:
+        #         thermalFound = True
+        #         width, height = features.width, features.height
+        #         print(f"Found thermal camera with resolution {width}x{height}")
+        #         break
+        #     if not thermalFound:
+        #         raise RuntimeError("No thermal camera found!")
+     
+        if device.getMxId() == OAK_T_MXID:
+            # deviceInfo = dai.DeviceInfo(OAK_T_MXID)
+            print(f"Found device with address {device.getDeviceName()} and MxID {OAK_T_MXID}")
+
+        if device_info is not None:
+           
+            run_pipeline_OAK_T(device)
+
+        print("Exiting OAK-T pipeline...")
+
+if __name__ == "__main__":
+    main()
 
     
 

@@ -1,10 +1,10 @@
 services:
 
-  keelson-connector-camera-realsense:
+  keelson-connector-camera-luxonis:
     build: .
-    container_name: cam-realsense
+    container_name: cam-luxonis
     restart: unless-stopped
     network_mode: "host"
     privileged: true
-    command: "--log-level 10 -r rise -e test -s camera/0 --publish point_cloud --publish raw_color --publish raw_depth "
+    command: "--log-level 10 -r rise -e storakrabban -s camera/thermal/0 --ip-address 192.168.3.12 --camera-thermal"
     

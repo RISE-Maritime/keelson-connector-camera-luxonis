@@ -5,7 +5,7 @@ def terminal_inputs():
     """Parse the terminal inputs and return the arguments"""
 
     parser = argparse.ArgumentParser(
-        prog="camera_relsense",
+        prog="camera_luxonis",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
@@ -53,13 +53,34 @@ def terminal_inputs():
 
     #####################################
 
+    ## IP address of the camera
     parser.add_argument(
-        "--publish",
-        action="append",
+        "--ip-address",
         type=str,
-        choices=["point_cloud","raw_color", "raw_depth"],
-        help="publish message type"
+        default="192.168.3.12",
+        help="IP address of the camera",
     )
+
+    parser.add_argument(
+        "--camera-thermal",
+        action="store_true",
+        help="Set to true if using a thermal camera",
+    )
+
+    parser.add_argument(
+        "--camera-stereo",
+        action="store_true",
+        help="Set to true if using a thermal camera",
+    )
+
+    # FPS
+    parser.add_argument(
+        "--fps",
+        type=int,
+        default=10,
+        help="Frames per second for the camera",
+    )
+  
 
   
   
