@@ -1,4 +1,4 @@
-keelson==0.4.3
+keelson==0.4.4rc10
 # opencv-python==4.10.0.84
 depthai==2.30.0.0
 opencv-python-headless
